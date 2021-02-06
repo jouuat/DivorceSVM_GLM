@@ -1,0 +1,211 @@
+---
+title: "DAKDproject"
+author: "Joan Prat Sicart"
+date: "12/15/2019"
+output: html_document
+---
+
+VARIABLE         | DESCRIPTION                          
+:--------------:|:-------------------------------------:
+"ATR"1. If one of us apologizes when our discussion deteriorates, the discussion ends.
+2. I know we can ignore our differences, even if things get hard sometimes.
+3. When we need it, we can take our discussions with my spouse from the beginning and correct it. 
+4. When I discuss with my spouse, to contact him will eventually work.
+5. The time I spent with my wife is special for us.
+6. We don’t have time at home as partners.
+7. We are like two strangers who share the same environment at home rather than family.
+8. I enjoy our holidays with my wife.
+9. I enjoy traveling with my wife.
+10. Most of our goals are common to my spouse.
+11. I think that one day in the future, when I look back, I see that my spouse and I have been in harmony with each other.
+12. My spouse and I have similar values in terms of personal freedom. 
+13. My spouse and I have similar sense of entertainment.
+14. Most of our goals for people (children, friends, etc.) are the same. 
+15. Our dreams with my spouse are similar and harmonious.
+16. We’re compatible with my spouse about what love should be.
+17. We share the same views about being happy in our life with my spouse 
+18. My spouse and I have similar ideas about how marriage should be
+19. My spouse and I have similar ideas about how roles should be in marriage 
+20. My spouse and I have similar values in trust.
+21. I know exactly what my wife likes.
+22. I know how my spouse wants to be taken care of when she/he sick.
+23. I know my spouse’s favorite food.
+24. I can tell you what kind of stress my spouse is facing in her/his life.
+
+
+
+```{r}
+library(fBasics)
+divorcedataset=read.csv2("divorce.csv", header = TRUE, na.strings="", stringsAsFactors=FALSE)
+head(divorcedataset)
+basicStats(divorcedataset)
+```
+
+
+```{r}
+for (i in 1:24)  boxplot(divorcedataset[,i]~divorcedataset[,55],horizontal = T,col=c(2,3))
+  
+```
+
+
+
+
+
+Create the training and test datasets
+
+```{r}
+set.seed(12345) #to make sure to have always the same random sequence
+(idx=sample(1:170,85,rep=F))
+
+divorcetraining = divorcedataset[idx,c(1:24,55)]
+head(divorcetraining)
+basicStats(divorcetraining)
+#to use exactly the same values when calculating it for the SVM
+#write.csv2(divorcetraining, file = "divorcetraining.csv")
+
+divorcetest = divorcedataset[-c(idx),c(1:24,55)]
+head(divorcetest)
+#to use exactly the same values when calculating it for the SVM
+#write.csv2(divorcetest, file = "divorcetest.csv")
+```
+
+
+```{r}
+for (i in 1:24)  boxplot(divorcetraining[,i]~divorcetraining[,25],horizontal = T,col=c(2,3))
+
+```
+
+
+```{r}
+#Check coloniearity between categorical values
+#pairs(divorcetraining[,1:7])
+#(don't have sense in numerical values, and more if you have as many factors as i have here, since it can't be apreciated)
+#També es pot comprovar 
+```
+
+#PCA
+execute the Principal Component Analisis in order to visualize the different relations in the dataset with the variables already choosen.
+
+```{r}
+# PCA
+
+divorce.pca <- prcomp(divorcetraining, center = TRUE,scale. = TRUE) # center and scale the data
+summary(divorce.pca)
+
+# Plot the PCA
+library(ggfortify)
+autoplot(divorce.pca, data =divorcetraining, loadings = TRUE, loadings.label = TRUE)
+```
+
+## Generalized Linear Model with  a binomial distribution
+
+
+```{r}
+#fullmodel
+fullmodel <- glm(Class ~  Atr1 + Atr2 + Atr3 + Atr4 + Atr5 + Atr6 + Atr7 + Atr8 + Atr9 + Atr10 + Atr11 + Atr12 + Atr13 + Atr14 + Atr15 + Atr16 + Atr17 + Atr18 + Atr19 + Atr20 + Atr21 + Atr22 + Atr23 + Atr24, data = divorcetraining ,family = binomial)
+#(si vulguessim valorar les interaccions i els termes quadratics dels coeficients fariem: fullmodel <- glm(Class ~ (Atr1+Atr2...)^2, data=...)
+
+summary(fullmodel)
+
+plot(fullmodel)
+#el plot del model el farem per validar el model (es pot fer mirant els plots o a partir dels tests de SMDE per exemple), a partir dels residuals veurem si el model te homoscedasticity(observant que la variancia entre les observacions es mante constant), si segueix normlitat observant que encaixa amb el normal Q-Q plot, i amb el Leverage observarem si hi han dades allunyades de la centroide( tindra una gran leverage un punt on la X = 8  i les altres estiguin entre X= 2,0  2,2  2,1 etc), la indepencia es justificarà a partir de fent l'assumpció que les dades son independents (que s'han fet a diferents persones), a SMDE s utilitza un test de linearitat particular, simplement comprovant que els residuals estant dispersos uniformement, pero no te sentit si els valors estan ordenats, així que al final tot s'acaba resumint amb assegurar-nos que les dades s'han pres independenment i en cas que no sapiguem com s'han pres assumir que son independents.
+
+#Per finalitzar per validar un linear model s'han de validar la homodestacity la normality i la independency, pero al tractar de generalized methods l'unica validació que farem serà la indepence ja que igualment la homoscedasticity sera dificil de validar i a vegades es fa intents amb el Piersons residuals (com una forma de calcular normality)
+
+#En models on tenim numerical explanatiry variables desagregated (sense agrupar-se per exemple totes les persones en que has votat el mateix) es molt dificil obtenir validacions bones, per tant, en el que es fa aquests casos es comprovar si el model funciona, 
+```
+
+```{r}
+## Omnibus test
+#veure si tots els valors de B son iguals a 0 o n hi ha com a minim 1 que no
+nullmodel <- glm(Class ~  1, data = divorcetraining ,family = binomial)
+anova(nullmodel, fullmodel, test = "Chisq")
+```
+
+```{r}
+### AIC procedure per valor si els coeficients seran significatius
+m1<-step(nullmodel,direction = "both",scope=list(upper=Class ~  (Atr1 + Atr2 + Atr3 + Atr4 + Atr5 + Atr6 + Atr7 + Atr8 + Atr9 + Atr10 + Atr11 + Atr12 + Atr13 + Atr14 + Atr15 + Atr16 + Atr17 + Atr18 + Atr19 + Atr20 + Atr21 + Atr22 + Atr23 + Atr24)),k=log(85))
+```
+
+```{r}
+#Observar si les variables escollides podrien tenir el coeficient al quadrat significatiu també
+#!!!OJO!!! pot ser que el terme quadratic d'una variable sigui significatiu i el terme lineal de la mateixa variable no
+library(car)
+residualPlots(m1)
+```
+
+
+
+
+
+```{r}
+#Si volguessim obtenir el model1 a partir del fullmodel
+#summary(m1<-step(fullmodel,direction="both",k=log(nrow(divorcetraining))))
+#plot(m1)
+```
+
+
+Com ja em dit abans no passarà el test de homoscedasticity ni el de normal, i el de independence no es ni interessant perque depen de si estan ordenades les dades, així que només es fan per curiositat
+
+```{r}
+# Test Linear Model hypothesis (nomes per veure quin desastre dona)
+
+test_assumptions <- function(Model){
+  alpha<-0.05
+  # (1) The experimental erros of your dta are normally distributed
+  first<-shapiro.test(residuals(Model))
+  if(first$p.value > 0.05) {
+    print(paste("Experimental errors are not normally distributed. P-value: ", first$p.value))
+  } else {
+    print(paste("Shapiro test passed. The experimental errors are normally distributed P-value: ", first$p.value))
+  }
+  
+  # (2) Equal variance
+  second<-lmtest::bptest(Model)
+  if(second$p.value > 0.05) {
+    print(paste("Not equal variance. P-value: ", second$p.value))
+  } else {
+    print(paste("Breusch Pagan test passed. Equal variance. P-value: ", second$p.value))
+  }
+  
+  # (3) Independent samples
+  third<-dwtest(Model)
+  if(third$p.value > 0.05) {
+    print(paste("Not independent samples. P-value: ", third$p.value))
+  } else {
+    print(paste("Durbin Watson Test passed. Independent samples. P-value: ", third$p.value))
+  }
+}
+
+
+test_assumptions(m1)
+```
+
+
+
+```{r}
+residualPlots(m1)
+#la idea d'aquest plot es veure si segueix una linia o corvatura, ja que en cas que s'aprecies curva seria necesssari afegir un membre quadratic al model (beta)*X^2
+```
+
+```{r}
+#Veure la response variable en funció dels valors que han resultats ser significatius
+
+boxplot(divorcetraining[,18]~divorcetraining[,25],horizontal = T,col=c(2,3))
+boxplot(divorcetraining[,20]~divorcetraining[,25],horizontal = T,col=c(2,3))
+```
+
+```{r}
+library(effects)
+plot(allEffects(m1))
+```
+
+Calcular la eficiència del model
+
+```{r}
+#Predict the results (si son mes grans que 0,5 igual a true otherwise false)
+table(predict(m1,type="response")>0.5,divorcetraining$Class)
+help("predict")
+#Calculate the eficency(Calculant la suma de la diagnoal de la matriu creada)
+sum(diag(table(predict(m1,type="response")>0.5,divorcetraining$Class)))/85
+```
